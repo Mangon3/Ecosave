@@ -25,4 +25,7 @@ public interface BudgetDao {
 
     @Query("SELECT SUM(amount) FROM budget_entries WHERE isExpense = 0")
     double getTotalIncome();
+
+    @Query("SELECT * FROM budget_entries ORDER BY timestamp DESC LIMIT 10")
+    List<BudgetEntry> getRecentEntries();
 }
