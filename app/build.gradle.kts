@@ -45,8 +45,8 @@ android {
         defaultConfig {
             version = "3.10"
             pip {
-                install("llama-cpp-python")
-                install("tiktoken") // For tracking token count as requested
+                // Chaquopy cannot install llama-cpp-python (C++) or tiktoken (Rust) natively
+                // We will handle the AI logic differently.
             }
         }
     }
@@ -80,8 +80,12 @@ dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     annotationProcessor("androidx.room:room-compiler:2.6.1")
     
-    // ViewModel
-    implementation("androidx.lifecycle:lifecycle-viewmodel:2.8.0")
+    // ViewModel & Coroutines
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    
+    // Llama Native (llamacpp-kotlin)
+    implementation("io.github.ljcamargo:llamacpp-kotlin:0.4.0")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
