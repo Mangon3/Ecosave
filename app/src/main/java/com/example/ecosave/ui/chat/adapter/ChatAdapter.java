@@ -22,6 +22,13 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
         notifyItemInserted(messages.size() - 1);
     }
 
+    public void updateLastMessage(String newText) {
+        if (!messages.isEmpty()) {
+            messages.get(messages.size() - 1).setText(newText);
+            notifyItemChanged(messages.size() - 1);
+        }
+    }
+
     @Override
     public int getItemViewType(int position) {
         return messages.get(position).isUser() ? VIEW_TYPE_USER : VIEW_TYPE_AI;

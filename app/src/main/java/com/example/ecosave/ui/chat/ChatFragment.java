@@ -21,57 +21,67 @@ public class ChatFragment extends Fragment {
     private ChatAdapter adapter;
     private EditText inputField;
     private ImageButton sendButton;
+    private ImageButton stopButton;
+    private RecyclerView recycler;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_chat, container, false);
         
-        viewModel = new ViewModelProvider(this).get(AiBuddyViewModel.class);
+        viewModel = new ViewModelProvider(requireActivity()).get(AiBuddyViewModel.class);
         adapter = new ChatAdapter();
         
-        RecyclerView recycler = view.findViewById(R.id.recycler_chat);
+        recycler = view.findViewById(R.id.recycler_chat);
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
         recycler.setAdapter(adapter);
         
         inputField = view.findViewById(R.id.edit_chat_input);
         sendButton = view.findViewById(R.id.btn_send);
-        
-        sendButton.setOnClickListener(v -> {
-            String text = inputField.getText().toString().trim();
-            if (!text.isEmpty()) {
-                // Add user message to UI
-                adapter.addMessage(new ChatMessage(text, true));
+        stopButton = view.findViewById(R.id.btn_stop);
+
+        // Show placeholder while AI generates greeting
+        adapter.addMessage(new ChatMessage("Loading AI buddy...", false));
+
+        // Single persistent response observer - always updates the last AI bubble
+        viewModel.getResponse().observe(getViewLifecycleOwner(), response -> {
+            if (response != null && !response.isEmpty()) {
+                adapter.updateLastMessage(response);
                 recycler.scrollToPosition(adapter.getItemCount() - 1);
-                
-                // Clear input and show loading placeholder
-                inputField.setText("");
-                adapter.addMessage(new ChatMessage("Thinking...", false));
-                int placeholderIndex = adapter.getItemCount() - 1;
-                recycler.scrollToPosition(placeholderIndex);
-                
-                // Request response from Llama 2 Python Engine
-                viewModel.askQuestion(text);
-                
-                // Temporary observer specifically for this response to replace placeholder
-                viewModel.getResponse().observe(getViewLifecycleOwner(), response -> {
-                    // Update the placeholder with the actual AI response
-                    // In a robust implementation, we'd use a better state management (like updating specific indices)
-                    // but for this prototype, appending or replacing the last message works.
-                    viewModel.getResponse().removeObservers(getViewLifecycleOwner()); // Only observe once per click
-                    
-                    // Since RecyclerView adapter updates aren't safely mutable this way for real apps,
-                    // we'll just add the real message and we can ignore replacing "Thinking..." for this simple prototype, 
-                    // or just add it normally. Let's add it normally and maybe remove the thinking one if we want.
-                    adapter.addMessage(new ChatMessage(response, false));
-                    recycler.scrollToPosition(adapter.getItemCount() - 1);
-                });
             }
         });
 
-        // Add initial greeting
-        adapter.addMessage(new ChatMessage("Hi! I'm your local AI financial buddy. How can I help you today?", false));
-        
+        // Single persistent loading observer - toggles send/stop buttons
+        viewModel.isLoading().observe(getViewLifecycleOwner(), isLoading -> {
+            if (isLoading != null && isLoading) {
+                sendButton.setVisibility(View.GONE);
+                stopButton.setVisibility(View.VISIBLE);
+                inputField.setEnabled(false);
+            } else {
+                stopButton.setVisibility(View.GONE);
+                sendButton.setVisibility(View.VISIBLE);
+                inputField.setEnabled(true);
+            }
+        });
+
+        sendButton.setOnClickListener(v -> {
+            String text = inputField.getText().toString().trim();
+            if (!text.isEmpty()) {
+                adapter.addMessage(new ChatMessage(text, true));
+                recycler.scrollToPosition(adapter.getItemCount() - 1);
+                
+                inputField.setText("");
+                adapter.addMessage(new ChatMessage("Thinking...", false));
+                recycler.scrollToPosition(adapter.getItemCount() - 1);
+                
+                viewModel.askQuestion(text);
+            }
+        });
+
+        stopButton.setOnClickListener(v -> {
+            viewModel.stopGeneration();
+        });
+
         return view;
     }
 }
