@@ -32,10 +32,6 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
-    // Signals that the current response is the auto-greeting
-    private val _isGreeting = MutableLiveData(false)
-    val isGreeting: LiveData<Boolean> = _isGreeting
-
     private val _history = MutableLiveData<List<ChatMessage>>()
     val history: LiveData<List<ChatMessage>> = _history
 
@@ -64,7 +60,7 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
                 when (event) {
                     is LlamaHelper.LLMEvent.Loaded -> {
                         _isLoading.postValue(false)
-                        // Fetch history from DB. If empty, send auto-greeting.
+                        // Fetch history from DB. If empty, send LLM-generated greeting.
                         withContext(Dispatchers.IO) {
                             val existingMessages = chatDao.getAllMessages()
                             if (existingMessages.isEmpty()) {
@@ -94,12 +90,10 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
                             }
                         }
                         _isLoading.postValue(false)
-                        _isGreeting.postValue(false)
                     }
                     is LlamaHelper.LLMEvent.Error -> {
                         _response.postValue("Error: ${event.message}")
                         _isLoading.postValue(false)
-                        _isGreeting.postValue(false)
                     }
                 }
             }
@@ -130,13 +124,13 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun sendGreeting() {
-        _isGreeting.postValue(true)
         viewModelScope.launch {
             val budgetContext = withContext(Dispatchers.IO) { buildBudgetContext() }
             if (cachedMarketContext == "Market data not yet loaded.") {
                 cachedMarketContext = fetchMarketData()
             }
             val greetingPrompt = PromptConfig.formatGreetingPrompt(budgetContext, cachedMarketContext)
+            android.util.Log.d("AiBuddyViewModel", ">>> GREETING PROMPT:\n$greetingPrompt")
             llamaHelper.predict(prompt = greetingPrompt, partialCompletion = true)
         }
     }
@@ -163,8 +157,8 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
             // Build recent chat history as context
             val historyContext = withContext(Dispatchers.IO) {
                 val pastMsgs = chatDao.getAllMessages()
-                // Take last 5 messages to avoid context overflow
-                val recent = if (pastMsgs.size > 5) pastMsgs.subList(pastMsgs.size - 5, pastMsgs.size) else pastMsgs
+                // Take last 3 messages to keep prompt short for TinyLlama
+                val recent = if (pastMsgs.size > 3) pastMsgs.subList(pastMsgs.size - 3, pastMsgs.size) else pastMsgs
                 buildString {
                     for (msg in recent) {
                         val role = if (msg.isUser) "user" else "assistant"
@@ -173,8 +167,8 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
 
-            // Since the user's prompt is already in the historyContext, we just need to append the system prompt and the assistant role marker.
             val formattedPrompt = "<|system|>\n$systemPrompt</s>\n$historyContext<|assistant|>\n"
+            android.util.Log.d("AiBuddyViewModel", ">>> FULL PROMPT:\n$formattedPrompt")
             llamaHelper.predict(prompt = formattedPrompt, partialCompletion = true)
         }
     }
