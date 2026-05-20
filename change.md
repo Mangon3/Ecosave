@@ -28,6 +28,9 @@ This document outlines the architectural and technical deviations made during th
 ## 4. UI/UX and Stability Features
 Several features were introduced during the implementation phase that were not detailed in the original proposal but were necessary for a polished user experience:
 * **Stop Generation Button**: Added a pause/stop button in the Chat UI that replaces the send button during generation. This lets the user stop run-on text generation instantly, releasing thread resources and saving battery.
-* **Response Word Limits**: A strict 120-word restriction was implemented via prompt engineering and parameter limits (`MAX_TOKENS = 160`) to keep the conversational buddy concise and within memory limits.
+* **Response Word/Character Limits**: A strict 120-word restriction was implemented via prompt engineering and parameter limits (`MAX_TOKENS = 160`) to keep the conversational buddy concise and within memory limits. Additionally, a strict 200-character input limit was enforced on the user's chat input interface to prevent token overflow.
 * **Prompt Configuration File**: Created a dedicated, centralized configuration class `PromptConfig.kt` to make changes to the prompt template easily manageable.
 * **Live Dashboard Synchronization**: Integrated Room Database checks in `onResume()` of the DashboardFragment so that current balance card updates automatically when the user adds/modifies entries in the Budget tab.
+* **Persistent Chat History & Reset (Room DB)**: Migrated `ChatMessage` to a Room Entity under `AppDatabase` (version 2 with safe schema migration) to save user and AI chats locally. Added a "Reset" feature to wipe the chat history and trigger a fresh budget-informed greeting.
+* **Parallel Stock Loading**: Refactored stock price retrieval in `fetchMarketData()` to run parallel network queries via coroutine `async`/`awaitAll`, preventing blocking UI delays when the chat launches.
+
