@@ -1,8 +1,15 @@
 package com.example.ecosave.ui.chat;
 
+import androidx.room.Entity;
+import androidx.room.PrimaryKey;
+
+@Entity(tableName = "chat_messages")
 public class ChatMessage {
-    private String text;
-    private boolean isUser;
+    @PrimaryKey(autoGenerate = true)
+    public int id;
+    
+    public String text;
+    public boolean isUser;
 
     public ChatMessage(String text, boolean isUser) {
         this.text = text;

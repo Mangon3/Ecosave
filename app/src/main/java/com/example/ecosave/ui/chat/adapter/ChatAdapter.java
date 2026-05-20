@@ -22,6 +22,22 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
         notifyItemInserted(messages.size() - 1);
     }
 
+    public void setMessages(List<ChatMessage> newMessages) {
+        messages.clear();
+        messages.addAll(newMessages);
+        notifyDataSetChanged();
+    }
+
+    public void clearMessages() {
+        messages.clear();
+        notifyDataSetChanged();
+    }
+
+    public boolean isLastMessageUser() {
+        if (messages.isEmpty()) return false;
+        return messages.get(messages.size() - 1).isUser();
+    }
+
     public void updateLastMessage(String newText) {
         if (!messages.isEmpty()) {
             messages.get(messages.size() - 1).setText(newText);

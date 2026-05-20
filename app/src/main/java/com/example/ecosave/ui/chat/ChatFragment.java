@@ -39,14 +39,32 @@ public class ChatFragment extends Fragment {
         inputField = view.findViewById(R.id.edit_chat_input);
         sendButton = view.findViewById(R.id.btn_send);
         stopButton = view.findViewById(R.id.btn_stop);
+        ImageButton resetButton = view.findViewById(R.id.btn_reset);
 
-        // Show placeholder while AI generates greeting
-        adapter.addMessage(new ChatMessage("Loading AI buddy...", false));
+        // Load chat history from DB
+        viewModel.getHistory().observe(getViewLifecycleOwner(), messages -> {
+            if (messages != null && !messages.isEmpty()) {
+                adapter.setMessages(messages);
+                recycler.scrollToPosition(adapter.getItemCount() - 1);
+            }
+        });
+
+        // Listen for reset events
+        viewModel.getChatReset().observe(getViewLifecycleOwner(), reset -> {
+            if (Boolean.TRUE.equals(reset)) {
+                adapter.clearMessages();
+            }
+        });
 
         // Single persistent response observer - always updates the last AI bubble
         viewModel.getResponse().observe(getViewLifecycleOwner(), response -> {
             if (response != null && !response.isEmpty()) {
-                adapter.updateLastMessage(response);
+                // If it's a new message, we add it, otherwise we update the last one
+                if (adapter.getItemCount() == 0 || adapter.isLastMessageUser()) {
+                    adapter.addMessage(new ChatMessage(response, false));
+                } else {
+                    adapter.updateLastMessage(response);
+                }
                 recycler.scrollToPosition(adapter.getItemCount() - 1);
             }
         });
@@ -62,6 +80,10 @@ public class ChatFragment extends Fragment {
                 sendButton.setVisibility(View.VISIBLE);
                 inputField.setEnabled(true);
             }
+        });
+
+        resetButton.setOnClickListener(v -> {
+            viewModel.resetChat();
         });
 
         sendButton.setOnClickListener(v -> {

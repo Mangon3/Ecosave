@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -34,9 +36,16 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     private val _isGreeting = MutableLiveData(false)
     val isGreeting: LiveData<Boolean> = _isGreeting
 
+    private val _history = MutableLiveData<List<ChatMessage>>()
+    val history: LiveData<List<ChatMessage>> = _history
+
+    private val _chatReset = MutableLiveData<Boolean>()
+    val chatReset: LiveData<Boolean> = _chatReset
+
     private val llmEvents = MutableSharedFlow<LlamaHelper.LLMEvent>(extraBufferCapacity = 64)
     private val llamaHelper: LlamaHelper
     private val budgetDao = AppDatabase.getDatabase(application).budgetDao()
+    private val chatDao = AppDatabase.getDatabase(application).chatDao()
 
     // Cache market data so we don't refetch on every message
     private var cachedMarketContext: String = "Market data not yet loaded."
@@ -55,8 +64,15 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
                 when (event) {
                     is LlamaHelper.LLMEvent.Loaded -> {
                         _isLoading.postValue(false)
-                        // Auto-send greeting after model loads
-                        sendGreeting()
+                        // Fetch history from DB. If empty, send auto-greeting.
+                        withContext(Dispatchers.IO) {
+                            val existingMessages = chatDao.getAllMessages()
+                            if (existingMessages.isEmpty()) {
+                                sendGreeting()
+                            } else {
+                                _history.postValue(existingMessages)
+                            }
+                        }
                     }
                     is LlamaHelper.LLMEvent.Started -> {
                         _isLoading.postValue(true)
@@ -72,6 +88,10 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
                         android.util.Log.d("AiBuddyViewModel", ">>> LLM Done. reply: $reply")
                         if (reply.isNotEmpty()) {
                             _response.postValue(reply)
+                            // Save AI response to DB
+                            withContext(Dispatchers.IO) {
+                                chatDao.insert(ChatMessage(reply, false))
+                            }
                         }
                         _isLoading.postValue(false)
                         _isGreeting.postValue(false)
@@ -123,6 +143,11 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
 
     fun askQuestion(prompt: String) {
         viewModelScope.launch {
+            // Save user prompt to DB
+            withContext(Dispatchers.IO) {
+                chatDao.insert(ChatMessage(prompt, true))
+            }
+
             // Fetch budget data on a background thread
             val budgetContext = withContext(Dispatchers.IO) {
                 buildBudgetContext()
@@ -134,8 +159,33 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
             }
 
             val systemPrompt = PromptConfig.buildFullSystemPrompt(budgetContext, cachedMarketContext)
-            val formattedPrompt = PromptConfig.formatPrompt(systemPrompt, prompt)
+            
+            // Build recent chat history as context
+            val historyContext = withContext(Dispatchers.IO) {
+                val pastMsgs = chatDao.getAllMessages()
+                // Take last 5 messages to avoid context overflow
+                val recent = if (pastMsgs.size > 5) pastMsgs.subList(pastMsgs.size - 5, pastMsgs.size) else pastMsgs
+                buildString {
+                    for (msg in recent) {
+                        val role = if (msg.isUser) "user" else "assistant"
+                        append("<|$role|>\n${msg.text}</s>\n")
+                    }
+                }
+            }
+
+            // Since the user's prompt is already in the historyContext, we just need to append the system prompt and the assistant role marker.
+            val formattedPrompt = "<|system|>\n$systemPrompt</s>\n$historyContext<|assistant|>\n"
             llamaHelper.predict(prompt = formattedPrompt, partialCompletion = true)
+        }
+    }
+
+    fun resetChat() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                chatDao.deleteAllMessages()
+            }
+            _chatReset.postValue(true)
+            sendGreeting()
         }
     }
 
@@ -166,11 +216,11 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private suspend fun fetchMarketData(): String {
-        return try {
+    private suspend fun fetchMarketData(): String = kotlinx.coroutines.coroutineScope {
+        return@coroutineScope try {
             val api = RetrofitClient.getClient().create(FinnhubApi::class.java)
             val apiKey = BuildConfig.FINNHUB_API_KEY
-            if (apiKey.isNullOrEmpty()) return "API key not configured."
+            if (apiKey.isNullOrEmpty()) return@coroutineScope "API key not configured."
 
             val stocks = arrayOf(
                 arrayOf("BHP", "BHP Group"),
@@ -178,34 +228,38 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
                 arrayOf("WDS", "Woodside Energy")
             )
 
-            val results = stocks.map { stock ->
-                suspendCancellableCoroutine<String> { cont ->
-                    api.getQuote(stock[0], apiKey).enqueue(object : Callback<JsonObject> {
-                        override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
-                            if (response.isSuccessful && response.body() != null) {
-                                val data = response.body()!!
-                                val price = if (data.has("c")) data.get("c").asDouble else 0.0
-                                val change = if (data.has("d")) data.get("d").asDouble else 0.0
-                                val pct = if (data.has("dp")) data.get("dp").asDouble else 0.0
-                                if (price > 0) {
-                                    val sign = if (change >= 0) "+" else ""
-                                    cont.resume(String.format(Locale.US,
-                                        "%s (%s): $%.2f %s%.2f (%.2f%%)",
-                                        stock[0], stock[1], price, sign, change, pct))
-                                } else {
+            val results = awaitAll(
+                *stocks.map { stock: Array<String> ->
+                    async {
+                        suspendCancellableCoroutine<String> { cont ->
+                            api.getQuote(stock[0], apiKey).enqueue(object : Callback<JsonObject> {
+                                override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
+                                    if (response.isSuccessful && response.body() != null) {
+                                        val data = response.body()!!
+                                        val price = if (data.has("c")) data.get("c").asDouble else 0.0
+                                        val change = if (data.has("d")) data.get("d").asDouble else 0.0
+                                        val pct = if (data.has("dp")) data.get("dp").asDouble else 0.0
+                                        if (price > 0) {
+                                            val sign = if (change >= 0) "+" else ""
+                                            cont.resume(String.format(Locale.US,
+                                                "%s (%s): $%.2f %s%.2f (%.2f%%)",
+                                                stock[0], stock[1], price, sign, change, pct))
+                                        } else {
+                                            cont.resume("")
+                                        }
+                                    } else {
+                                        cont.resume("")
+                                    }
+                                }
+
+                                override fun onFailure(call: Call<JsonObject>, t: Throwable) {
                                     cont.resume("")
                                 }
-                            } else {
-                                cont.resume("")
-                            }
+                            })
                         }
-
-                        override fun onFailure(call: Call<JsonObject>, t: Throwable) {
-                            cont.resume("")
-                        }
-                    })
-                }
-            }
+                    }
+                }.toTypedArray()
+            )
 
             val marketText = results.filter { it.isNotEmpty() }.joinToString("\n")
             if (marketText.isNotEmpty()) marketText else "Market data currently unavailable."
