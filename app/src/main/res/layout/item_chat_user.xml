@@ -3,16 +3,17 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="end"
-    android:padding="8dp">
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="4dp">
 
     <TextView
         android:id="@+id/text_message"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="#BBDEFB"
-        android:textColor="#0D47A1"
-        android:padding="12dp"
-        android:textSize="16sp"
-        android:layout_marginLeft="48dp"
+        android:background="@color/accent"
+        android:textColor="@color/text_on_accent"
+        android:padding="14dp"
+        android:textSize="15sp"
+        android:lineSpacingExtra="2dp"
         android:layout_marginStart="48dp"/>
 </LinearLayout>
