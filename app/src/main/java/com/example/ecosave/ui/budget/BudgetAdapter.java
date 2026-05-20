@@ -18,6 +18,7 @@ public class BudgetAdapter extends RecyclerView.Adapter<BudgetAdapter.EntryViewH
     private final List<BudgetEntry> entries = new ArrayList<>();
 
     public void setEntries(List<BudgetEntry> newEntries) {
+        // Update adapter data with new entries
         entries.clear();
         entries.addAll(newEntries);
         notifyDataSetChanged();
@@ -26,6 +27,7 @@ public class BudgetAdapter extends RecyclerView.Adapter<BudgetAdapter.EntryViewH
     @NonNull
     @Override
     public EntryViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        // Inflate budget entry item layout
         View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_budget_entry, parent, false);
         return new EntryViewHolder(view);
     }
@@ -37,6 +39,7 @@ public class BudgetAdapter extends RecyclerView.Adapter<BudgetAdapter.EntryViewH
 
     @Override
     public int getItemCount() {
+        // Return total no. of items
         return entries.size();
     }
 
@@ -51,14 +54,15 @@ public class BudgetAdapter extends RecyclerView.Adapter<BudgetAdapter.EntryViewH
         }
 
         void bind(BudgetEntry entry) {
+            // Populate item view elements w' values
             description.setText(entry.description);
             category.setText(entry.category);
             if (entry.isExpense) {
                 amount.setText(String.format(Locale.US, "-$%.2f", entry.amount));
-                amount.setTextColor(0xFFE53935); // red
+                amount.setTextColor(0xFFE53935);
             } else {
                 amount.setText(String.format(Locale.US, "+$%.2f", entry.amount));
-                amount.setTextColor(0xFF43A047); // green
+                amount.setTextColor(0xFF43A047);
             }
         }
     }

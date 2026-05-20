@@ -8,7 +8,6 @@ public class EcosaveApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        // init chaquopy
         if (!Python.isStarted()) {
             Python.start(new AndroidPlatform(this));
         }

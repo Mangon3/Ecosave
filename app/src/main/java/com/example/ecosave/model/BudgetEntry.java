@@ -10,10 +10,11 @@ public class BudgetEntry {
     
     public String description;
     public double amount;
-    public boolean isExpense; // true for expense, false for income
+    public boolean isExpense;
     public String category;
     public long timestamp;
 
+    // Data fields
     public BudgetEntry(String description, double amount, boolean isExpense, String category, long timestamp) {
         this.description = description;
         this.amount = amount;

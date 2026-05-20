@@ -39,6 +39,7 @@ public class DashboardFragment extends Fragment {
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        // Set up UI components and time greeting
         View view = inflater.inflate(R.layout.fragment_dashboard, container, false);
 
         textAsxData = view.findViewById(R.id.text_asx_data);
@@ -48,7 +49,6 @@ public class DashboardFragment extends Fragment {
         textExpenses = view.findViewById(R.id.text_expenses);
         textDashboardTitle = view.findViewById(R.id.text_dashboard_title);
 
-        // Calculate time-based greeting
         java.util.Calendar calendar = java.util.Calendar.getInstance();
         int hour = calendar.get(java.util.Calendar.HOUR_OF_DAY);
         String greeting;
@@ -70,8 +70,8 @@ public class DashboardFragment extends Fragment {
 
     @Override
     public void onResume() {
+        // Load budget summary when screen resumes
         super.onResume();
-        // Refresh budget data every time the tab becomes visible
         loadBudgetSummary();
     }
 
@@ -84,6 +84,7 @@ public class DashboardFragment extends Fragment {
         boolean success;
 
         StockResult(String symbol, String name) {
+            // Initialize the stock result model
             this.symbol = symbol;
             this.name = name;
             this.success = false;
@@ -91,6 +92,7 @@ public class DashboardFragment extends Fragment {
     }
 
     private void fetchAsxData() {
+        // Fetch market stock quotes from remote API
         FinnhubApi api = RetrofitClient.getClient().create(FinnhubApi.class);
         String apiKey = BuildConfig.FINNHUB_API_KEY;
 
@@ -99,7 +101,6 @@ public class DashboardFragment extends Fragment {
             return;
         }
 
-        // Major ASX companies dual-listed on NYSE (available on Finnhub free tier)
         String[][] stocks = {
             {"BHP", "BHP Group"},
             {"RIO", "Rio Tinto"},
@@ -158,6 +159,7 @@ public class DashboardFragment extends Fragment {
     }
 
     private void updateMarketUi(StockResult[] results) {
+        // Render results on screen with colors
         if (getActivity() == null) return;
         getActivity().runOnUiThread(() -> {
             android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder();
@@ -196,6 +198,7 @@ public class DashboardFragment extends Fragment {
     }
 
     private void loadBudgetSummary() {
+        // Read database context on background thread
         Executors.newSingleThreadExecutor().execute(() -> {
             double totalIncome = budgetDao.getTotalIncome();
             double totalExpenses = budgetDao.getTotalExpenses();
@@ -204,7 +207,6 @@ public class DashboardFragment extends Fragment {
 
             if (getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
-                    // Format past 3 transactions with color coding
                     android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder();
                     int count = Math.min(recent.size(), 3);
                     if (count == 0) {
@@ -237,11 +239,10 @@ public class DashboardFragment extends Fragment {
                     textIncome.setText(String.format(Locale.US, "$%.2f", totalIncome));
                     textExpenses.setText(String.format(Locale.US, "$%.2f", totalExpenses));
 
-                    // Color the balance based on positive/negative
                     if (balance >= 0) {
-                        textBalance.setTextColor(0xFF121212); // dark on accent
+                        textBalance.setTextColor(0xFF121212);
                     } else {
-                        textBalance.setTextColor(0xFFEF5350); // red for negative
+                        textBalance.setTextColor(0xFFEF5350);
                     }
                 });
             }

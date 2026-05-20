@@ -37,7 +37,6 @@ public class MainActivity extends AppCompatActivity {
             return true;
         });
 
-        // Set default fragment
         if (savedInstanceState == null) {
             bottomNav.setSelectedItemId(R.id.navigation_dashboard);
         }

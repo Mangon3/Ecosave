@@ -43,24 +43,22 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     private val budgetDao = AppDatabase.getDatabase(application).budgetDao()
     private val chatDao = AppDatabase.getDatabase(application).chatDao()
 
-    // Cache market data so we don't refetch on every message
     private var cachedMarketContext: String = "Market data not yet loaded."
 
     init {
+        // Init llama helper & model context
         llamaHelper = LlamaHelper(
             contentResolver = application.contentResolver,
             scope = viewModelScope,
             sharedFlow = llmEvents
         )
 
-        // Observe events from the native llama.cpp engine
         viewModelScope.launch {
             llmEvents.collect { event ->
                 android.util.Log.d("AiBuddyViewModel", ">>> Collected event: $event")
                 when (event) {
                     is LlamaHelper.LLMEvent.Loaded -> {
                         _isLoading.postValue(false)
-                        // Fetch history from DB. If empty, send LLM-generated greeting.
                         withContext(Dispatchers.IO) {
                             val existingMessages = chatDao.getAllMessages()
                             if (existingMessages.isEmpty()) {
@@ -84,7 +82,6 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
                         android.util.Log.d("AiBuddyViewModel", ">>> LLM Done. reply: $reply")
                         if (reply.isNotEmpty()) {
                             _response.postValue(reply)
-                            // Save AI response to DB
                             withContext(Dispatchers.IO) {
                                 chatDao.insert(ChatMessage(reply, false))
                             }
@@ -99,7 +96,6 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
-        // Initialize the model
         val modelFile = java.io.File(application.getExternalFilesDir(null), PromptConfig.MODEL_FILENAME)
         if (!modelFile.exists()) {
             _response.postValue("Error: Model file not found at " + modelFile.absolutePath)
@@ -113,17 +109,16 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
             val modelPath = modelUri.toString()
             _isLoading.postValue(true)
             llamaHelper.load(path = modelPath, contextLength = PromptConfig.CONTEXT_LENGTH) { contextId ->
-                // Model loaded successfully
             }
         }
 
-        // Pre-fetch market data on init
         viewModelScope.launch {
             cachedMarketContext = fetchMarketData()
         }
     }
 
     private fun sendGreeting() {
+        // Send initial greeting request to model
         viewModelScope.launch {
             val budgetContext = withContext(Dispatchers.IO) { buildBudgetContext() }
             if (cachedMarketContext == "Market data not yet loaded.") {
@@ -136,28 +131,24 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun askQuestion(prompt: String) {
+        // Send user query with context and history to model
         viewModelScope.launch {
-            // Save user prompt to DB
             withContext(Dispatchers.IO) {
                 chatDao.insert(ChatMessage(prompt, true))
             }
 
-            // Fetch budget data on a background thread
             val budgetContext = withContext(Dispatchers.IO) {
                 buildBudgetContext()
             }
 
-            // Refresh market data if stale
             if (cachedMarketContext == "Market data not yet loaded.") {
                 cachedMarketContext = fetchMarketData()
             }
 
             val systemPrompt = PromptConfig.buildFullSystemPrompt(budgetContext, cachedMarketContext)
             
-            // Build recent chat history as context
             val historyContext = withContext(Dispatchers.IO) {
                 val pastMsgs = chatDao.getAllMessages()
-                // Take last 3 messages to keep prompt short for TinyLlama
                 val recent = if (pastMsgs.size > 3) pastMsgs.subList(pastMsgs.size - 3, pastMsgs.size) else pastMsgs
                 buildString {
                     for (msg in recent) {
@@ -174,6 +165,7 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun resetChat() {
+        // Clear chat messages from database & restart conversation
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 chatDao.deleteAllMessages()
@@ -184,6 +176,7 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun buildBudgetContext(): String {
+        // Construct budget summary details as str
         return try {
             val totalIncome = budgetDao.totalIncome
             val totalExpenses = budgetDao.totalExpenses
@@ -211,6 +204,7 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun fetchMarketData(): String = kotlinx.coroutines.coroutineScope {
+        // Retrieve stock quotes from api
         return@coroutineScope try {
             val api = RetrofitClient.getClient().create(FinnhubApi::class.java)
             val apiKey = BuildConfig.FINNHUB_API_KEY
@@ -268,6 +262,7 @@ class AiBuddyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     override fun onCleared() {
+        // Release model context when viewmodel is destroyed
         super.onCleared()
         llamaHelper.release()
     }

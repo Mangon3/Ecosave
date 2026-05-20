@@ -27,6 +27,7 @@ public class ChatFragment extends Fragment {
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        // Setup fragment view hierarchy & live data observers
         View view = inflater.inflate(R.layout.fragment_chat, container, false);
         
         viewModel = new ViewModelProvider(requireActivity()).get(AiBuddyViewModel.class);
@@ -41,7 +42,6 @@ public class ChatFragment extends Fragment {
         stopButton = view.findViewById(R.id.btn_stop);
         ImageButton resetButton = view.findViewById(R.id.btn_reset);
 
-        // Load chat history from DB
         viewModel.getHistory().observe(getViewLifecycleOwner(), messages -> {
             if (messages != null && !messages.isEmpty()) {
                 adapter.setMessages(messages);
@@ -49,17 +49,14 @@ public class ChatFragment extends Fragment {
             }
         });
 
-        // Listen for reset events
         viewModel.getChatReset().observe(getViewLifecycleOwner(), reset -> {
             if (Boolean.TRUE.equals(reset)) {
                 adapter.clearMessages();
             }
         });
 
-        // Single persistent response observer - always updates the last AI bubble
         viewModel.getResponse().observe(getViewLifecycleOwner(), response -> {
             if (response != null && !response.isEmpty()) {
-                // If it's a new message, we add it, otherwise we update the last one
                 if (adapter.getItemCount() == 0 || adapter.isLastMessageUser()) {
                     adapter.addMessage(new ChatMessage(response, false));
                 } else {
@@ -69,7 +66,6 @@ public class ChatFragment extends Fragment {
             }
         });
 
-        // Single persistent loading observer - toggles send/stop buttons
         viewModel.isLoading().observe(getViewLifecycleOwner(), isLoading -> {
             if (isLoading != null && isLoading) {
                 sendButton.setVisibility(View.GONE);
