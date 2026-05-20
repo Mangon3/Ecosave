@@ -33,6 +33,7 @@ public class DashboardFragment extends Fragment {
     private TextView textBalance;
     private TextView textIncome;
     private TextView textExpenses;
+    private TextView textDashboardTitle;
     private BudgetDao budgetDao;
 
     @Nullable
@@ -45,6 +46,20 @@ public class DashboardFragment extends Fragment {
         textBalance = view.findViewById(R.id.text_balance);
         textIncome = view.findViewById(R.id.text_income);
         textExpenses = view.findViewById(R.id.text_expenses);
+        textDashboardTitle = view.findViewById(R.id.text_dashboard_title);
+
+        // Calculate time-based greeting
+        java.util.Calendar calendar = java.util.Calendar.getInstance();
+        int hour = calendar.get(java.util.Calendar.HOUR_OF_DAY);
+        String greeting;
+        if (hour < 12) {
+            greeting = "Good Morning!";
+        } else if (hour < 18) {
+            greeting = "Good Afternoon";
+        } else {
+            greeting = "Good Evening";
+        }
+        textDashboardTitle.setText(greeting);
 
         budgetDao = AppDatabase.getDatabase(requireContext()).budgetDao();
 
@@ -60,6 +75,21 @@ public class DashboardFragment extends Fragment {
         loadBudgetSummary();
     }
 
+    private static class StockResult {
+        String symbol;
+        String name;
+        double price;
+        double change;
+        double pct;
+        boolean success;
+
+        StockResult(String symbol, String name) {
+            this.symbol = symbol;
+            this.name = name;
+            this.success = false;
+        }
+    }
+
     private void fetchAsxData() {
         FinnhubApi api = RetrofitClient.getClient().create(FinnhubApi.class);
         String apiKey = BuildConfig.FINNHUB_API_KEY;
@@ -70,26 +100,28 @@ public class DashboardFragment extends Fragment {
         }
 
         // Major ASX companies dual-listed on NYSE (available on Finnhub free tier)
-        // BHP Group, Rio Tinto, Woodside Energy - top ASX 200 constituents
         String[][] stocks = {
             {"BHP", "BHP Group"},
             {"RIO", "Rio Tinto"},
             {"WDS", "Woodside Energy"}
         };
 
-        StringBuilder resultBuilder = new StringBuilder();
+        final StockResult[] results = new StockResult[stocks.length];
+        for (int i = 0; i < stocks.length; i++) {
+            results[i] = new StockResult(stocks[i][0], stocks[i][1]);
+        }
         final int[] completed = {0};
 
-        for (String[] stock : stocks) {
-            String symbol = stock[0];
-            String name = stock[1];
+        for (int i = 0; i < stocks.length; i++) {
+            final int index = i;
+            String symbol = stocks[i][0];
 
             api.getQuote(symbol, apiKey).enqueue(new Callback<JsonObject>() {
                 @Override
                 public void onResponse(@NonNull Call<JsonObject> call, @NonNull Response<JsonObject> response) {
                     if (!isAdded()) return;
 
-                    synchronized (resultBuilder) {
+                    synchronized (results) {
                         if (response.isSuccessful() && response.body() != null) {
                             JsonObject data = response.body();
                             double price = data.has("c") ? data.get("c").getAsDouble() : 0;
@@ -97,22 +129,16 @@ public class DashboardFragment extends Fragment {
                             double pct = data.has("dp") ? data.get("dp").getAsDouble() : 0;
 
                             if (price > 0) {
-                                String sign = change >= 0 ? "+" : "";
-                                String arrow = change >= 0 ? "  [UP]" : "  [DOWN]";
-                                resultBuilder.append(String.format(Locale.US,
-                                        "%s (%s): $%.2f  %s%.2f (%.2f%%)%s\n",
-                                        symbol, name, price, sign, change, pct, arrow));
+                                results[index].price = price;
+                                results[index].change = change;
+                                results[index].pct = pct;
+                                results[index].success = true;
                             }
                         }
 
                         completed[0]++;
                         if (completed[0] == stocks.length) {
-                            if (getActivity() != null) {
-                                getActivity().runOnUiThread(() -> {
-                                    String result = resultBuilder.toString().trim();
-                                    textAsxData.setText(result.isEmpty() ? "Market data unavailable" : result);
-                                });
-                            }
+                            updateMarketUi(results);
                         }
                     }
                 }
@@ -120,15 +146,10 @@ public class DashboardFragment extends Fragment {
                 @Override
                 public void onFailure(@NonNull Call<JsonObject> call, @NonNull Throwable t) {
                     if (!isAdded()) return;
-                    synchronized (resultBuilder) {
+                    synchronized (results) {
                         completed[0]++;
                         if (completed[0] == stocks.length) {
-                            if (getActivity() != null) {
-                                getActivity().runOnUiThread(() -> {
-                                    String result = resultBuilder.toString().trim();
-                                    textAsxData.setText(result.isEmpty() ? "Network error" : result);
-                                });
-                            }
+                            updateMarketUi(results);
                         }
                     }
                 }
@@ -136,17 +157,81 @@ public class DashboardFragment extends Fragment {
         }
     }
 
+    private void updateMarketUi(StockResult[] results) {
+        if (getActivity() == null) return;
+        getActivity().runOnUiThread(() -> {
+            android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder();
+            for (int i = 0; i < results.length; i++) {
+                StockResult r = results[i];
+                String line;
+                if (r.success) {
+                    String sign = r.change >= 0 ? "+" : "";
+                    String arrow = r.change >= 0 ? "  [UP]" : "  [DOWN]";
+                    line = String.format(Locale.US, "%s (%s): $%.2f  %s%.2f (%.2f%%)%s",
+                            r.symbol, r.name, r.price, sign, r.change, r.pct, arrow);
+                } else {
+                    line = String.format(Locale.US, "%s (%s): Unavailable", r.symbol, r.name);
+                }
+
+                int start = ssb.length();
+                ssb.append(line);
+                int end = ssb.length();
+
+                if (r.success) {
+                    if (r.pct >= 1.0) {
+                        ssb.setSpan(new android.text.style.ForegroundColorSpan(0xFF43A047), start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else if (r.pct <= -1.0) {
+                        ssb.setSpan(new android.text.style.ForegroundColorSpan(0xFFE53935), start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                } else {
+                    ssb.setSpan(new android.text.style.ForegroundColorSpan(0xFF757575), start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+
+                if (i < results.length - 1) {
+                    ssb.append("\n");
+                }
+            }
+            textAsxData.setText(ssb);
+        });
+    }
+
     private void loadBudgetSummary() {
         Executors.newSingleThreadExecutor().execute(() -> {
             double totalIncome = budgetDao.getTotalIncome();
             double totalExpenses = budgetDao.getTotalExpenses();
             double balance = totalIncome - totalExpenses;
+            java.util.List<com.example.ecosave.model.BudgetEntry> recent = budgetDao.getRecentEntries();
 
             if (getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
-                    textBudgetSummary.setText(String.format(Locale.US,
-                            "Income: $%.2f\nExpenses: $%.2f",
-                            totalIncome, totalExpenses));
+                    // Format past 3 transactions with color coding
+                    android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder();
+                    int count = Math.min(recent.size(), 3);
+                    if (count == 0) {
+                        ssb.append("No recent transactions");
+                    } else {
+                        for (int i = 0; i < count; i++) {
+                            com.example.ecosave.model.BudgetEntry entry = recent.get(i);
+                            String sign = entry.isExpense ? "-" : "+";
+                            String amountText = String.format(Locale.US, "%s$%.2f", sign, entry.amount);
+
+                            String prefix = String.format(Locale.US, "%s (%s)  ", entry.description, entry.category);
+                            ssb.append(prefix);
+
+                            int start = ssb.length();
+                            ssb.append(amountText);
+                            int end = ssb.length();
+
+                            int color = entry.isExpense ? 0xFFE53935 : 0xFF43A047;
+                            ssb.setSpan(new android.text.style.ForegroundColorSpan(color), start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                            ssb.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+                            if (i < count - 1) {
+                                ssb.append("\n");
+                            }
+                        }
+                    }
+                    textBudgetSummary.setText(ssb);
 
                     textBalance.setText(String.format(Locale.US, "$%.2f", balance));
                     textIncome.setText(String.format(Locale.US, "$%.2f", totalIncome));
