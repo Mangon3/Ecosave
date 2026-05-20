@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler_chat"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp"
+        android:clipToPadding="false"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:background="@color/surface"
+        android:gravity="center_vertical">
+
+        <EditText
+            android:id="@+id/edit_chat_input"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:hint="Ask your AI buddy..."
+            android:textColorHint="@color/nav_unselected"
+            android:textColor="@color/text_primary"
+            android:background="@color/surface_elevated"
+            android:paddingHorizontal="16dp"
+            android:textSize="15sp"
+            android:maxLength="200"/>
+
+        <ImageButton
+            android:id="@+id/btn_reset"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:src="@android:drawable/ic_menu_revert"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Reset Chat"
+            app:tint="@color/text_secondary"
+            xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+        <ImageButton
+            android:id="@+id/btn_send"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:src="@android:drawable/ic_menu_send"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Send"
+            app:tint="@color/accent"
+            xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+        <ImageButton
+            android:id="@+id/btn_stop"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:src="@android:drawable/ic_media_pause"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Stop"
+            android:visibility="gone"
+            app:tint="@color/negative"
+            xmlns:app="http://schemas.android.com/apk/res-auto"/>
+    </LinearLayout>
+</LinearLayout>
